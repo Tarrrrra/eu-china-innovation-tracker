@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EU–China S&T Cooperation Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=IBM+Plex+Mono:wght@300;400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:        #0b0f1a;
+    --surface:   #111827;
+    --surface2:  #1a2235;
+    --border:    #1f3050;
+    --text:      #e8edf5;
+    --muted:     #6b7fa3;
+    --accent:    #4fc3f7;
+    --eu-blue:   #003399;
+    --cn-red:    #de2910;
+
+    --c1: #4fc3f7;   /* Joint Research */
+    --c2: #ff9f43;   /* Joint Programs */
+    --c3: #26de81;   /* Researcher Exchange */
+    --c4: #fd4d5c;   /* Conferences */
+    --c5: #a29bfe;   /* Sci Info Exchange */
+    --c6: #fdcb6e;   /* Flagship */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; }
+
+  /* ── Header ── */
+  .header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    padding: 18px 28px 14px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(90deg, #0b0f1a 0%, #0d1628 60%, #0b1520 100%);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-left { display: flex; align-items: baseline; gap: 14px; }
+  .header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.45rem; font-weight: 700;
+    letter-spacing: -.02em; color: #fff;
+  }
+  .header h1 span.eu { color: #6fa8ff; }
+  .header h1 span.cn { color: #ff6b6b; }
+  .subtitle { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem;
+    color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+  .live-badge {
+    display: flex; align-items: center; gap: 6px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem;
+    color: var(--accent); letter-spacing: .08em;
+  }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%;
+    background: #26de81; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+  /* ── Filters ── */
+  .filters {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 28px; background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .filter-label { font-size: .68rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .07em; white-space: nowrap; }
+  .filter-btn {
+    padding: 4px 11px; border-radius: 3px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); cursor: pointer;
+    font-family: 'IBM Plex Mono', monospace; font-size: .68rem;
+    letter-spacing: .04em; transition: all .15s;
+  }
+  .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .filter-btn.active { background: var(--accent); border-color: var(--accent);
+    color: #000; font-weight: 600; }
+  .sep { width: 1px; height: 20px; background: var(--border); }
+  .range-select {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    padding: 4px 8px; border-radius: 3px; font-family: 'IBM Plex Mono', monospace;
+    font-size: .68rem; cursor: pointer;
+  }
+
+  /* ── Layout ── */
+  .dashboard {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 10px; padding: 12px 16px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+    padding: 14px 16px; position: relative; overflow: hidden;
+  }
+  .card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+  .card-title {
+    font-family: 'IBM Plex Mono', monospace; font-size: .65rem;
+    text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+    margin-bottom: 10px; display: flex; justify-content: space-between;
+  }
+  .card-title span { color: var(--accent); }
+
+  /* span widths */
+  .span2 { grid-column: span 2; }
+  .span3 { grid-column: span 3; }
+
+  /* ── KPI row ── */
+  .kpis {
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    gap: 8px; padding: 0 16px 10px;
+  }
+  .kpi { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 10px 14px; position: relative; overflow: hidden; }
+  .kpi-num {
+    font-family: 'Playfair Display', serif; font-size: 1.7rem;
+    font-weight: 900; line-height: 1; color: #fff;
+  }
+  .kpi-label { font-size: .62rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .06em; margin-top: 3px; }
+  .kpi-bar { position: absolute; bottom: 0; left: 0; height: 2px;
+    border-radius: 0 2px 2px 0; }
+
+  /* ── Chart containers ── */
+  .chart-svg { width: 100%; overflow: visible; }
+  .tooltip {
+    position: fixed; background: #1e2d45; border: 1px solid var(--accent);
+    border-radius: 4px; padding: 8px 11px; font-size: .72rem; color: var(--text);
+    pointer-events: none; z-index: 999; max-width: 260px; line-height: 1.5;
+    display: none; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  .tooltip strong { color: var(--accent); display: block; margin-bottom: 4px; }
+
+  /* ── Legend ── */
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; cursor: pointer;
+    padding: 2px 6px; border-radius: 2px; transition: background .15s; }
+  .legend-item:hover { background: var(--surface2); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .legend-text { font-size: .65rem; color: var(--muted); }
+
+  /* ── Timeline events ── */
+  .event-list { max-height: 220px; overflow-y: auto; }
+  .event-list::-webkit-scrollbar { width: 3px; }
+  .event-list::-webkit-scrollbar-thumb { background: var(--border); }
+  .event-row {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 6px 0; border-bottom: 1px solid var(--border); cursor: pointer;
+    transition: background .1s;
+  }
+  .event-row:hover { background: var(--surface2); margin: 0 -16px; padding: 6px 16px; }
+  .event-year { font-family: 'IBM Plex Mono', monospace; font-size: .65rem;
+    color: var(--muted); min-width: 32px; padding-top: 2px; }
+  .event-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .event-title { font-size: .72rem; line-height: 1.4; color: var(--text); }
+  .event-meta { font-size: .6rem; color: var(--muted); margin-top: 2px; }
+  .forecast-tag { font-size: .55rem; background: rgba(79,195,247,.15);
+    color: var(--accent); border: 1px solid rgba(79,195,247,.3);
+    padding: 1px 5px; border-radius: 2px; margin-left: 5px; }
+
+  /* ── Sentiment badge ── */
+  .sent-pos { color: #26de81; }
+  .sent-neg { color: #fd4d5c; }
+  .sent-neu { color: var(--muted); }
+
+  /* ── Axis text ── */
+  .axis text { font-family: 'IBM Plex Mono', monospace; font-size: 9px; fill: #6b7fa3; }
+  .axis line, .axis path { stroke: #1f3050; }
+  .grid line { stroke: #1a2235; stroke-dasharray: 2,3; }
+
+</style>
+</head>
+<body>
+
+<!-- ── Tooltip ── -->
+<div class="tooltip" id="tooltip"></div>
+
+<!-- ── Header ── -->
+<div class="header">
+  <div class="header-left">
+    <h1><span class="eu">EU</span>–<span class="cn">China</span> S&amp;T Cooperation Tracker</h1>
+    <div class="subtitle">Science &amp; Technology Agreement · 2000–2026</div>
+  </div>
+  <div class="live-badge"><div class="live-dot"></div>NLP Pipeline Active · 61 Events Indexed</div>
+</div>
+
+<!-- ── Filters ── -->
+<div class="filters">
+  <span class="filter-label">Activity</span>
+  <button class="filter-btn active" data-act="all">All</button>
+  <button class="filter-btn" data-act="Joint Research Projects">Joint Research</button>
+  <button class="filter-btn" data-act="Joint Programs">Joint Programs</button>
+  <button class="filter-btn" data-act="Researcher Exchange">Researcher Exchange</button>
+  <button class="filter-btn" data-act="Conferences & Seminars">Conferences</button>
+  <button class="filter-btn" data-act="Exchange of Scientific Information">Sci. Info</button>
+  <button class="filter-btn" data-act="Flagship Initiatives">Flagship</button>
+  <div class="sep"></div>
+  <span class="filter-label">Range</span>
+  <select class="range-select" id="rangeSelect">
+    <option value="all">2000–2026</option>
+    <option value="2000-2009">2000s</option>
+    <option value="2010-2019">2010s</option>
+    <option value="2020-2026">2020s</option>
+  </select>
+  <div class="sep"></div>
+  <span class="filter-label">Language</span>
+  <button class="filter-btn active" data-lang="all">Both</button>
+  <button class="filter-btn" data-lang="en">EN</button>
+  <button class="filter-btn" data-lang="zh">ZH</button>
+</div>
+
+<!-- ── KPIs ── -->
+<div class="kpis" id="kpis"></div>
+
+<!-- ── Dashboard grid ── -->
+<div class="dashboard">
+  <!-- Stacked bar by year -->
+  <div class="card span2">
+    <div class="card-title">Activity Volume by Year <span id="totalBadge"></span></div>
+    <svg id="stackedBar" class="chart-svg" height="160"></svg>
+    <div class="legend" id="legendBar"></div>
+  </div>
+
+  <!-- Donut -->
+  <div class="card">
+    <div class="card-title">Activity Distribution <span></span></div>
+    <svg id="donut" class="chart-svg" height="160"></svg>
+  </div>
+
+  <!-- Timeline / area chart -->
+  <div class="card span3">
+    <div class="card-title">Cumulative Activity Trend  <span id="trendNote">Shaded = forecast (2026+)</span></div>
+    <svg id="areaChart" class="chart-svg" height="130"></svg>
+  </div>
+
+  <!-- Sentiment heatmap -->
+  <div class="card">
+    <div class="card-title">Sentiment by Activity <span></span></div>
+    <svg id="heatmap" class="chart-svg" height="160"></svg>
+  </div>
+
+  <!-- Language split -->
+  <div class="card">
+    <div class="card-title">Language Coverage <span></span></div>
+    <svg id="langBar" class="chart-svg" height="160"></svg>
+  </div>
+
+  <!-- Event feed -->
+  <div class="card">
+    <div class="card-title">Event Feed <span id="feedCount"></span></div>
+    <div class="event-list" id="eventList"></div>
+  </div>
+</div>
+
+<script>
+// ── Data ─────────────────────────────────────────────────────────────────────
+const RAW = [{"year":2000,"title":"EU-China S&T Cooperation Agreement renewed for new decade","source":"EU Commission Press","language":"en","primary_activity":"Joint Programs","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2000-02-22"},{"year":2001,"title":"First EU-China Joint Research Committee meeting in Beijing","source":"EU Commission Press","language":"en","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2001-08-13"},{"year":2002,"title":"EU-China researcher mobility programme launched","source":"Xinhua (EN)","language":"en","primary_activity":"Researcher Exchange","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2002-06-25"},{"year":2003,"title":"中欧科技合作联委会第二次会议在布鲁塞尔举行","source":"新华网 (ZH)","language":"zh","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2003-02-20"},{"year":2004,"title":"EU-China joint workshop on environmental science cooperation","source":"EU Commission Press","language":"en","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"environment","date":"2004-03-03"},{"year":2004,"title":"中欧联合研究项目首批成果发布","source":"新华网 (ZH)","language":"zh","primary_activity":"Joint Research Projects","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2004-07-28"},{"year":2005,"title":"EU-China cooperative research project on nanotechnology signed","source":"Xinhua (EN)","language":"en","primary_activity":"Joint Research Projects","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"nanotechnology","date":"2005-09-22"},{"year":2005,"title":"中欧研究人员交流项目正式启动","source":"新华网 (ZH)","language":"zh","primary_activity":"Researcher Exchange","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2005-09-23"},{"year":2006,"title":"EU FP7 opens calls for China-based research collaborations","source":"EU Commission Press","language":"en","primary_activity":"Joint Programs","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2006-07-04"},{"year":2006,"title":"EU-China S&T information exchange protocol signed in Beijing","source":"Xinhua (EN)","language":"en","primary_activity":"Exchange of Scientific Information","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2006-11-13"},{"year":2007,"title":"EU-China high-level dialogue on energy technology cooperation","source":"EU Commission Press","language":"en","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"energy","date":"2007-07-11"},{"year":2007,"title":"中欧签署科技信息共享协议","source":"People's Daily (EN)","language":"zh","primary_activity":"Exchange of Scientific Information","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2007-03-26"},{"year":2008,"title":"EU-China joint research programme on climate change launched","source":"EU Commission Press","language":"en","primary_activity":"Joint Research Projects","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"climate","date":"2008-10-19"},{"year":2008,"title":"EU-China summit: science and technology agreement extended","source":"Xinhua (EN)","language":"en","primary_activity":"Joint Programs","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2008-05-24"},{"year":2009,"title":"China-EU sustainable energy research fellowship established","source":"EU Commission Press","language":"en","primary_activity":"Researcher Exchange","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"energy","date":"2009-07-13"},{"year":2009,"title":"中欧联合实验室首批建设启动","source":"新华网 (ZH)","language":"zh","primary_activity":"Joint Research Projects","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2009-06-07"},{"year":2010,"title":"EU-China Innovation Cooperation Dialogue established at ministerial level","source":"EU Commission Press","language":"en","primary_activity":"Flagship Initiatives","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2010-02-16"},{"year":2010,"title":"EU-China joint symposium on food safety science","source":"Xinhua (EN)","language":"en","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2010-11-02"},{"year":2011,"title":"中欧科技创新合作旗舰项目正式立项","source":"新华网 (ZH)","language":"zh","primary_activity":"Flagship Initiatives","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2011-11-24"},{"year":2011,"title":"EU-China research infrastructure access agreement signed","source":"EU Commission Press","language":"en","primary_activity":"Exchange of Scientific Information","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2011-04-18"},{"year":2012,"title":"EU FP7 China joint calls results: 45 collaborative projects funded","source":"EU Commission Press","language":"en","primary_activity":"Joint Research Projects","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2012-02-22"},{"year":2012,"title":"EU-China researcher exchange sees record 2,300 scientists in 2012","source":"Xinhua (EN)","language":"en","primary_activity":"Researcher Exchange","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2012-09-10"},{"year":2013,"title":"中欧科技合作协定续签仪式在北京举行","source":"People's Daily (EN)","language":"zh","primary_activity":"Joint Programs","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2013-01-28"},{"year":2013,"title":"EU-China S&T Agreement renewed; Horizon 2020 China participation agreed","source":"EU Commission Press","language":"en","primary_activity":"Joint Programs","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2013-06-26"},{"year":2014,"title":"Horizon 2020 first joint calls with China in ICT and environment","source":"EU Commission Press","language":"en","primary_activity":"Joint Programs","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"environment","date":"2014-09-22"},{"year":2014,"title":"EU-China seminar on quantum communication research","source":"Xinhua (EN)","language":"en","primary_activity":"Conferences & Seminars","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"quantum","date":"2014-10-06"},{"year":2015,"title":"EU-China flagship initiative on urbanisation and environment launched","source":"EU Commission Press","language":"en","primary_activity":"Flagship Initiatives","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"environment","date":"2015-05-14"},{"year":2015,"title":"中欧旗舰合作项目：城镇化与绿色发展","source":"新华网 (ZH)","language":"zh","primary_activity":"Flagship Initiatives","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2015-06-02"},{"year":2016,"title":"EU-China open data agreement for research signed at Brussels summit","source":"EU Commission Press","language":"en","primary_activity":"Exchange of Scientific Information","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2016-07-05"},{"year":2016,"title":"Record 320 Chinese scientists receive Marie Curie fellowships","source":"Xinhua (EN)","language":"en","primary_activity":"Researcher Exchange","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2016-09-20"},{"year":2017,"title":"中欧联合研究与创新伙伴关系深化路线图发布","source":"新华网 (ZH)","language":"zh","primary_activity":"Flagship Initiatives","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2017-12-21"},{"year":2017,"title":"EU-China Joint Science and Technology Committee 14th meeting, Beijing","source":"EU Commission Press","language":"en","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2017-05-28"},{"year":2018,"title":"EU-China security concerns emerge over technology transfer rules","source":"EU Commission Press","language":"en","primary_activity":"Exchange of Scientific Information","sentiment_label":"Negative","sentiment_score":-1.0,"entities_domains":"","date":"2018-05-10"},{"year":2018,"title":"EU-China joint AI research programme discussion at JSTC meeting","source":"Xinhua (EN)","language":"en","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"ai","date":"2018-11-11"},{"year":2019,"title":"EU-China Strategic Research Agenda adopted by Joint Committee","source":"EU Commission Press","language":"en","primary_activity":"Flagship Initiatives","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2019-01-14"},{"year":2019,"title":"中欧战略性科研议程通过，聚焦气候与数字领域","source":"People's Daily (EN)","language":"zh","primary_activity":"Flagship Initiatives","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2019-10-06"},{"year":2020,"title":"EU-China cooperation on COVID-19 research and data sharing","source":"EU Commission Press","language":"en","primary_activity":"Exchange of Scientific Information","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2020-06-04"},{"year":2020,"title":"中欧疫情科研数据共享协议达成","source":"新华网 (ZH)","language":"zh","primary_activity":"Exchange of Scientific Information","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2020-09-14"},{"year":2020,"title":"Horizon Europe negotiations stall; China participation under review","source":"EU Commission Press","language":"en","primary_activity":"Joint Programs","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2020-04-07"},{"year":2021,"title":"EU de-risks China research links; some Horizon Europe calls restricted","source":"EU Commission Press","language":"en","primary_activity":"Joint Programs","sentiment_label":"Negative","sentiment_score":-1.0,"entities_domains":"","date":"2021-07-19"},{"year":2021,"title":"EU-China researcher exchange programmes continue despite tensions","source":"Xinhua (EN)","language":"en","primary_activity":"Researcher Exchange","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2021-12-13"},{"year":2021,"title":"中欧科研人员交流项目年度报告：共3200人参与","source":"新华网 (ZH)","language":"zh","primary_activity":"Researcher Exchange","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2021-02-24"},{"year":2022,"title":"EU strategic autonomy policy affects China joint research funding decisions","source":"EU Commission Press","language":"en","primary_activity":"Joint Programs","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2022-08-20"},{"year":2022,"title":"EU-China S&T Agreement extended for further five years","source":"EU Commission Press","language":"en","primary_activity":"Joint Programs","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2022-02-09"},{"year":2022,"title":"中欧科技合作协定续签五年","source":"People's Daily (EN)","language":"zh","primary_activity":"Joint Programs","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2022-10-24"},{"year":2023,"title":"EU-China Joint S&T Committee resumes dialogue after COVID pause","source":"EU Commission Press","language":"en","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2023-06-23"},{"year":2023,"title":"中欧联合科技委员会复会，聚焦气候与绿色科技","source":"新华网 (ZH)","language":"zh","primary_activity":"Conferences & Seminars","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2023-11-11"},{"year":2023,"title":"EU security review leads to restricted participation in sensitive research areas","source":"EU Commission Press","language":"en","primary_activity":"Exchange of Scientific Information","sentiment_label":"Negative","sentiment_score":-1.0,"entities_domains":"","date":"2023-11-09"},{"year":2023,"title":"EU-China climate technology joint research initiative announced","source":"Xinhua (EN)","language":"en","primary_activity":"Joint Research Projects","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"climate","date":"2023-03-20"},{"year":2024,"title":"EU-China flagship initiative on green hydrogen research signed","source":"EU Commission Press","language":"en","primary_activity":"Flagship Initiatives","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2024-08-04"},{"year":2024,"title":"中欧绿色氢能旗舰合作项目签署","source":"新华网 (ZH)","language":"zh","primary_activity":"Flagship Initiatives","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2024-10-06"},{"year":2024,"title":"EU-China researcher exchange 2024: 4,100 mobility grants awarded","source":"Xinhua (EN)","language":"en","primary_activity":"Researcher Exchange","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2024-10-01"},{"year":2024,"title":"EU-China AI governance dialogue launched at ministerial level","source":"EU Commission Press","language":"en","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"ai","date":"2024-10-23"},{"year":2024,"title":"中欧人工智能治理对话启动","source":"People's Daily (EN)","language":"zh","primary_activity":"Conferences & Seminars","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2024-10-19"},{"year":2024,"title":"Joint EU-China publication on quantum computing milestones released","source":"EU Commission Press","language":"en","primary_activity":"Exchange of Scientific Information","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"quantum","date":"2024-06-20"},{"year":2025,"title":"EU-China S&T Agreement mid-term review conference, Brussels","source":"EU Commission Press","language":"en","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2025-04-22"},{"year":2025,"title":"中欧科技合作协定中期评估会议在布鲁塞尔举行","source":"新华网 (ZH)","language":"zh","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2025-07-13"},{"year":2025,"title":"New EU-China joint research projects approved under 2025 framework","source":"EU Commission Press","language":"en","primary_activity":"Joint Research Projects","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2025-07-16"},{"year":2025,"title":"EU-China flagship clean energy initiative expanded to fusion research","source":"Xinhua (EN)","language":"en","primary_activity":"Flagship Initiatives","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"energy","date":"2025-01-04"},{"year":2026,"title":"EU-China upcoming: Horizon Europe successor programme China modalities","source":"EU Commission Press","language":"en","primary_activity":"Joint Programs","sentiment_label":"Neutral","sentiment_score":0.0,"entities_domains":"","date":"2026-03-04"},{"year":2026,"title":"Planned EU-China Joint S&T Committee annual meeting, Q2 2026","source":"Xinhua (EN)","language":"en","primary_activity":"Conferences & Seminars","sentiment_label":"Positive","sentiment_score":1.0,"entities_domains":"","date":"2026-06-19"}];
+
+const COLORS = {
+  "Joint Research Projects":           "#4fc3f7",
+  "Joint Programs":                    "#ff9f43",
+  "Researcher Exchange":               "#26de81",
+  "Conferences & Seminars":            "#fd4d5c",
+  "Exchange of Scientific Information":"#a29bfe",
+  "Flagship Initiatives":              "#fdcb6e",
+  "Unclassified":                      "#6b7fa3",
+};
+const ACTS = Object.keys(COLORS).slice(0,6);
+const FORECAST_YEAR = 2026;
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let state = { act: 'all', lang: 'all', yearMin: 2000, yearMax: 2026 };
+
+function filteredData() {
+  return RAW.filter(d => {
+    if (state.act !== 'all' && d.primary_activity !== state.act) return false;
+    if (state.lang !== 'all' && d.language !== state.lang) return false;
+    if (d.year < state.yearMin || d.year > state.yearMax) return false;
+    return true;
+  });
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+const tip = document.getElementById('tooltip');
+function showTip(e, html) {
+  tip.innerHTML = html; tip.style.display = 'block';
+  tip.style.left = (e.clientX + 14) + 'px';
+  tip.style.top  = (e.clientY - 10) + 'px';
+}
+function moveTip(e) {
+  tip.style.left = (e.clientX + 14) + 'px';
+  tip.style.top  = (e.clientY - 10) + 'px';
+}
+function hideTip() { tip.style.display = 'none'; }
+
+// ── KPIs ──────────────────────────────────────────────────────────────────────
+function renderKPIs(data) {
+  const kpiEl = document.getElementById('kpis');
+  const total = data.length;
+  const byCat = {};
+  ACTS.forEach(a => byCat[a] = data.filter(d => d.primary_activity === a).length);
+  const maxCat = Math.max(...Object.values(byCat), 1);
+
+  kpiEl.innerHTML = ACTS.map(a => `
+    <div class="kpi">
+      <div class="kpi-num" style="color:${COLORS[a]}">${byCat[a]}</div>
+      <div class="kpi-label">${a.replace(' & ',' &amp; ')}</div>
+      <div class="kpi-bar" style="background:${COLORS[a]};width:${byCat[a]/maxCat*100}%"></div>
+    </div>
+  `).join('');
+}
+
+// ── Stacked Bar ───────────────────────────────────────────────────────────────
+function renderStackedBar(data) {
+  const svg = d3.select('#stackedBar');
+  svg.selectAll('*').remove();
+  const W = svg.node().parentElement.clientWidth - 32;
+  const H = 160;
+  svg.attr('viewBox', `0 0 ${W} ${H}`);
+
+  const years = [...new Set(RAW.map(d => d.year))].sort();
+  const byYearAct = {};
+  years.forEach(y => {
+    byYearAct[y] = {};
+    ACTS.forEach(a => byYearAct[y][a] = 0);
+  });
+  data.forEach(d => { if (byYearAct[d.year]) byYearAct[d.year][d.primary_activity]++; });
+
+  const stackData = years.map(y => ({ year: y, ...byYearAct[y] }));
+  const stack = d3.stack().keys(ACTS)(stackData);
+  const maxVal = d3.max(stack, s => d3.max(s, d => d[1])) || 1;
+
+  const pad = { l: 28, r: 10, t: 8, b: 22 };
+  const xScale = d3.scaleBand().domain(years).range([pad.l, W - pad.r]).padding(.18);
+  const yScale = d3.scaleLinear().domain([0, maxVal]).range([H - pad.b, pad.t]);
+
+  // Grid
+  const g = svg.append('g');
+  [1,2,3,4].forEach(v => {
+    const y = yScale(v);
+    g.append('line').attr('class','grid').attr('x1', pad.l).attr('x2', W - pad.r)
+      .attr('y1', y).attr('y2', y).attr('stroke','#1a2235').attr('stroke-dasharray','2,3');
+  });
+
+  // Forecast region
+  const fcX = xScale(FORECAST_YEAR);
+  if (fcX) {
+    svg.append('rect').attr('x', fcX - 2).attr('y', pad.t)
+      .attr('width', W - pad.r - fcX + 4).attr('height', H - pad.t - pad.b)
+      .attr('fill', 'rgba(79,195,247,0.04)').attr('stroke', 'rgba(79,195,247,0.2)')
+      .attr('stroke-dasharray', '3,3');
+  }
+
+  // Bars
+  stack.forEach((series, si) => {
+    const act = ACTS[si];
+    svg.selectAll(`.bar-${si}`).data(series).enter().append('rect')
+      .attr('x', d => xScale(d.data.year))
+      .attr('y', d => yScale(d[1]))
+      .attr('width', xScale.bandwidth())
+      .attr('height', d => Math.max(0, yScale(d[0]) - yScale(d[1])))
+      .attr('fill', COLORS[act])
+      .attr('opacity', d => d.data.year >= FORECAST_YEAR ? 0.45 : 0.85)
+      .on('mouseover', (e, d) => showTip(e, `<strong>${d.data.year}</strong>${act}: ${d[1]-d[0]} event(s)`))
+      .on('mousemove', moveTip).on('mouseout', hideTip);
+  });
+
+  // X axis (every 4 years)
+  const xAxis = svg.append('g').attr('transform', `translate(0,${H - pad.b})`).attr('class','axis');
+  years.filter((y,i) => i % 4 === 0 || y === 2026).forEach(y => {
+    xAxis.append('text').attr('x', xScale(y) + xScale.bandwidth()/2).attr('y', 12)
+      .attr('text-anchor','middle').attr('fill','#6b7fa3').attr('font-size', 9)
+      .attr('font-family','IBM Plex Mono, monospace').text(y);
+  });
+
+  document.getElementById('totalBadge').textContent = `${data.length} events`;
+
+  // Legend
+  const legEl = document.getElementById('legendBar');
+  legEl.innerHTML = ACTS.map(a => `
+    <div class="legend-item" data-act="${a}">
+      <div class="legend-dot" style="background:${COLORS[a]}"></div>
+      <span class="legend-text">${a}</span>
+    </div>`).join('');
+}
+
+// ── Donut ─────────────────────────────────────────────────────────────────────
+function renderDonut(data) {
+  const svg = d3.select('#donut');
+  svg.selectAll('*').remove();
+  const W = svg.node().parentElement.clientWidth - 32;
+  const H = 160;
+  svg.attr('viewBox', `0 0 ${W} ${H}`);
+
+  const counts = {};
+  ACTS.forEach(a => counts[a] = data.filter(d => d.primary_activity === a).length);
+  const total = data.length || 1;
+
+  const pie = d3.pie().value(d => d[1]).sort(null);
+  const arc = d3.arc().innerRadius(50).outerRadius(68);
+  const arcHover = d3.arc().innerRadius(50).outerRadius(74);
+
+  const g = svg.append('g').attr('transform', `translate(${W/2},${H/2})`);
+
+  pie(Object.entries(counts)).forEach(d => {
+    const act = d.data[0];
+    g.append('path').datum(d)
+      .attr('d', arc)
+      .attr('fill', COLORS[act])
+      .attr('stroke', '#0b0f1a').attr('stroke-width', 1.5)
+      .on('mouseover', function(e, d) {
+        d3.select(this).attr('d', arcHover(d));
+        const pct = ((d.data[1]/total)*100).toFixed(1);
+        showTip(e, `<strong>${d.data[0]}</strong>${d.data[1]} events (${pct}%)`);
+      })
+      .on('mousemove', moveTip)
+      .on('mouseout', function(e, d) { d3.select(this).attr('d', arc(d)); hideTip(); });
+  });
+
+  g.append('text').attr('text-anchor','middle').attr('dy','0.35em')
+    .attr('font-size', 20).attr('font-family','Playfair Display, serif')
+    .attr('fill','#fff').attr('font-weight','700').text(total);
+  g.append('text').attr('text-anchor','middle').attr('dy','1.6em')
+    .attr('font-size', 8).attr('font-family','IBM Plex Mono, monospace')
+    .attr('fill','#6b7fa3').text('EVENTS');
+}
+
+// ── Area / trend chart ─────────────────────────────────────────────────────────
+function renderArea(data) {
+  const svg = d3.select('#areaChart');
+  svg.selectAll('*').remove();
+  const W = svg.node().parentElement.clientWidth - 32;
+  const H = 130;
+  svg.attr('viewBox', `0 0 ${W} ${H}`);
+
+  const years = d3.range(2000, 2027);
+  const yearCounts = {};
+  years.forEach(y => yearCounts[y] = 0);
+  data.forEach(d => { if (yearCounts[d.year] !== undefined) yearCounts[d.year]++; });
+
+  let cum = 0;
+  const cumData = years.map(y => { cum += yearCounts[y]; return { year: y, cum }; });
+  const maxCum = cum || 1;
+
+  const pad = { l: 32, r: 10, t: 10, b: 20 };
+  const xS = d3.scaleLinear().domain([2000, 2026]).range([pad.l, W - pad.r]);
+  const yS = d3.scaleLinear().domain([0, maxCum]).range([H - pad.b, pad.t]);
+
+  // Forecast region
+  svg.append('rect').attr('x', xS(FORECAST_YEAR)).attr('y', pad.t)
+    .attr('width', xS(2026) - xS(FORECAST_YEAR) + 1)
+    .attr('height', H - pad.t - pad.b)
+    .attr('fill', 'rgba(79,195,247,0.06)');
+
+  // Area (historical)
+  const areaFn = d3.area().x(d => xS(d.year)).y0(H - pad.b).y1(d => yS(d.cum)).curve(d3.curveMonotoneX);
+  svg.append('path').datum(cumData.filter(d => d.year < FORECAST_YEAR))
+    .attr('d', areaFn).attr('fill', 'rgba(79,195,247,0.15)').attr('stroke', 'none');
+
+  // Line
+  const lineFn = d3.line().x(d => xS(d.year)).y(d => yS(d.cum)).curve(d3.curveMonotoneX);
+  svg.append('path').datum(cumData)
+    .attr('d', lineFn).attr('fill','none').attr('stroke','#4fc3f7').attr('stroke-width', 2);
+
+  // Forecast dashed
+  svg.append('path').datum(cumData.filter(d => d.year >= FORECAST_YEAR - 1))
+    .attr('d', lineFn).attr('fill','none').attr('stroke','#4fc3f7')
+    .attr('stroke-width', 1.5).attr('stroke-dasharray','4,4').attr('opacity', 0.7);
+
+  // Dots on each year
+  svg.selectAll('circle').data(cumData).enter().append('circle')
+    .attr('cx', d => xS(d.year)).attr('cy', d => yS(d.cum)).attr('r', 3)
+    .attr('fill', d => d.year >= FORECAST_YEAR ? 'transparent' : '#4fc3f7')
+    .attr('stroke', '#4fc3f7').attr('stroke-width', 1.5)
+    .on('mouseover', (e, d) => showTip(e, `<strong>${d.year}</strong>Cumulative: ${d.cum} events`))
+    .on('mousemove', moveTip).on('mouseout', hideTip);
+
+  // Y axis labels
+  [0, Math.round(maxCum/2), maxCum].forEach(v => {
+    svg.append('text').attr('x', pad.l - 4).attr('y', yS(v) + 3)
+      .attr('text-anchor','end').attr('fill','#6b7fa3')
+      .attr('font-size', 8).attr('font-family','IBM Plex Mono, monospace').text(v);
+  });
+
+  // X axis
+  [2000,2005,2010,2015,2020,2025,2026].forEach(y => {
+    svg.append('text').attr('x', xS(y)).attr('y', H - 4)
+      .attr('text-anchor','middle').attr('fill', y >= FORECAST_YEAR ? '#4fc3f7' : '#6b7fa3')
+      .attr('font-size', 8.5).attr('font-family','IBM Plex Mono, monospace').text(y);
+  });
+}
+
+// ── Sentiment Heatmap ─────────────────────────────────────────────────────────
+function renderHeatmap(data) {
+  const svg = d3.select('#heatmap');
+  svg.selectAll('*').remove();
+  const W = svg.node().parentElement.clientWidth - 32;
+  const H = 160;
+  svg.attr('viewBox', `0 0 ${W} ${H}`);
+
+  const sents = ['Positive','Neutral','Negative'];
+  const matrix = {};
+  ACTS.forEach(a => { matrix[a] = {}; sents.forEach(s => matrix[a][s] = 0); });
+  data.forEach(d => { if (matrix[d.primary_activity]) matrix[d.primary_activity][d.sentiment_label]++; });
+
+  const maxVal = Math.max(...ACTS.flatMap(a => sents.map(s => matrix[a][s])), 1);
+  const pad = { l: 120, t: 18, b: 8, r: 10 };
+  const cellW = (W - pad.l - pad.r) / 3;
+  const cellH = (H - pad.t - pad.b) / 6;
+
+  // Column headers
+  sents.forEach((s, i) => {
+    svg.append('text').attr('x', pad.l + i * cellW + cellW/2).attr('y', 12)
+      .attr('text-anchor','middle').attr('fill','#6b7fa3')
+      .attr('font-size', 8).attr('font-family','IBM Plex Mono, monospace').text(s);
+  });
+
+  ACTS.forEach((a, ai) => {
+    svg.append('text').attr('x', pad.l - 5).attr('y', pad.t + ai * cellH + cellH/2 + 3)
+      .attr('text-anchor','end').attr('fill','#8899bb')
+      .attr('font-size', 7.5).attr('font-family','IBM Plex Sans, sans-serif').text(a.length > 22 ? a.slice(0,20)+'…' : a);
+
+    sents.forEach((s, si) => {
+      const val = matrix[a][s];
+      const opacity = val / maxVal;
+      const color = s === 'Positive' ? '#26de81' : s === 'Negative' ? '#fd4d5c' : '#a29bfe';
+      svg.append('rect')
+        .attr('x', pad.l + si * cellW + 1).attr('y', pad.t + ai * cellH + 1)
+        .attr('width', cellW - 2).attr('height', cellH - 2).attr('rx', 2)
+        .attr('fill', color).attr('opacity', opacity * 0.8 + 0.1)
+        .on('mouseover', e => showTip(e, `<strong>${a}</strong>${s}: ${val} event(s)`))
+        .on('mousemove', moveTip).on('mouseout', hideTip);
+      if (val > 0) {
+        svg.append('text').attr('x', pad.l + si * cellW + cellW/2)
+          .attr('y', pad.t + ai * cellH + cellH/2 + 3)
+          .attr('text-anchor','middle').attr('fill','#fff')
+          .attr('font-size', 8).attr('font-family','IBM Plex Mono, monospace').text(val);
+      }
+    });
+  });
+}
+
+// ── Language bar ──────────────────────────────────────────────────────────────
+function renderLangBar(data) {
+  const svg = d3.select('#langBar');
+  svg.selectAll('*').remove();
+  const W = svg.node().parentElement.clientWidth - 32;
+  const H = 160;
+  svg.attr('viewBox', `0 0 ${W} ${H}`);
+
+  const years = d3.range(2000, 2027);
+  const byYear = {};
+  years.forEach(y => byYear[y] = { en: 0, zh: 0 });
+  data.forEach(d => { if (byYear[d.year]) byYear[d.year][d.language]++; });
+
+  const maxVal = Math.max(...years.map(y => byYear[y].en + byYear[y].zh), 1);
+  const pad = { l: 22, r: 8, t: 8, b: 20 };
+  const xS = d3.scaleBand().domain(years).range([pad.l, W - pad.r]).padding(.2);
+  const yS = d3.scaleLinear().domain([0, maxVal]).range([H - pad.b, pad.t]);
+
+  years.forEach(y => {
+    const en = byYear[y].en, zh = byYear[y].zh;
+    if (en + zh === 0) return;
+    // EN bar
+    svg.append('rect').attr('x', xS(y)).attr('y', yS(en))
+      .attr('width', xS.bandwidth()).attr('height', Math.max(0, yS(0) - yS(en)))
+      .attr('fill', '#6fa8ff').attr('opacity', y >= FORECAST_YEAR ? 0.4 : 0.75);
+    // ZH bar stacked
+    if (zh > 0) {
+      svg.append('rect').attr('x', xS(y)).attr('y', yS(en + zh))
+        .attr('width', xS.bandwidth()).attr('height', Math.max(0, yS(en) - yS(en + zh)))
+        .attr('fill', '#ff6b6b').attr('opacity', y >= FORECAST_YEAR ? 0.4 : 0.75);
+    }
+    // hover
+    svg.append('rect').attr('x', xS(y)).attr('y', pad.t)
+      .attr('width', xS.bandwidth()).attr('height', H - pad.t - pad.b)
+      .attr('fill', 'transparent')
+      .on('mouseover', e => showTip(e, `<strong>${y}</strong>EN: ${en} · ZH: ${zh}`))
+      .on('mousemove', moveTip).on('mouseout', hideTip);
+  });
+
+  // X axis
+  years.filter((y,i) => i % 5 === 0 || y === 2026).forEach(y => {
+    svg.append('text').attr('x', xS(y) + xS.bandwidth()/2).attr('y', H - 5)
+      .attr('text-anchor','middle').attr('fill','#6b7fa3')
+      .attr('font-size', 8).attr('font-family','IBM Plex Mono, monospace').text(y);
+  });
+
+  // Legend
+  [['EN (English)','#6fa8ff'],['ZH (Chinese)','#ff6b6b']].forEach(([l,c], i) => {
+    svg.append('rect').attr('x', pad.l + i*80).attr('y', 2).attr('width', 7).attr('height', 7).attr('rx', 2).attr('fill', c);
+    svg.append('text').attr('x', pad.l + i*80 + 10).attr('y', 9)
+      .attr('fill','#6b7fa3').attr('font-size', 8).attr('font-family','IBM Plex Mono, monospace').text(l);
+  });
+}
+
+// ── Event feed ────────────────────────────────────────────────────────────────
+function renderFeed(data) {
+  const el = document.getElementById('eventList');
+  document.getElementById('feedCount').textContent = `${data.length} records`;
+  const sorted = [...data].sort((a,b) => b.year - a.year);
+  el.innerHTML = sorted.slice(0, 40).map(d => {
+    const sentClass = d.sentiment_label === 'Positive' ? 'sent-pos' : d.sentiment_label === 'Negative' ? 'sent-neg' : 'sent-neu';
+    const fc = d.year >= FORECAST_YEAR ? '<span class="forecast-tag">FORECAST</span>' : '';
+    return `<div class="event-row">
+      <span class="event-year">${d.year}</span>
+      <div class="event-dot" style="background:${COLORS[d.primary_activity]||'#6b7fa3'}"></div>
+      <div>
+        <div class="event-title">${d.title}${fc}</div>
+        <div class="event-meta">
+          <span style="color:${COLORS[d.primary_activity]||'#6b7fa3'}">${d.primary_activity}</span>
+          · <span class="${sentClass}">${d.sentiment_label}</span>
+          · ${d.language.toUpperCase()} · ${d.source}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Render all ────────────────────────────────────────────────────────────────
+function renderAll() {
+  const data = filteredData();
+  renderKPIs(data);
+  renderStackedBar(data);
+  renderDonut(data);
+  renderArea(data);
+  renderHeatmap(data);
+  renderLangBar(data);
+  renderFeed(data);
+}
+
+// ── Filter wiring ─────────────────────────────────────────────────────────────
+document.querySelectorAll('[data-act]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-act]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.act = btn.dataset.act;
+    renderAll();
+  });
+});
+document.querySelectorAll('[data-lang]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-lang]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.lang = btn.dataset.lang;
+    renderAll();
+  });
+});
+document.getElementById('rangeSelect').addEventListener('change', e => {
+  const v = e.target.value;
+  if (v === 'all') { state.yearMin = 2000; state.yearMax = 2026; }
+  else { const [a,b] = v.split('-'); state.yearMin = +a; state.yearMax = +b; }
+  renderAll();
+});
+
+// Initial render + resize
+renderAll();
+window.addEventListener('resize', renderAll);
+</script>
+</body>
+</html>
